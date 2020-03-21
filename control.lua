@@ -829,6 +829,8 @@ function gui_open_close_frame(player)
 
   local ppt = global.config.well_planner_power_pole_type
 
+  local inv = player.get_main_inventory()
+
   for entity_id, ppp in pairs(power_poles) do
     if ppt == nil then
       ppt = entity_id
@@ -845,6 +847,8 @@ function gui_open_close_frame(player)
         type = "sprite-button",
         sprite = "entity/" .. entity_id,
         style = style,
+        tooltip = ppp.localised_name,
+        number = inv.get_item_count(entity_id),
       }
     )  
   end
