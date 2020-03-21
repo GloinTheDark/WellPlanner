@@ -1,0 +1,9 @@
+{
+  "name": "WellPlanner",
+  "version": "0.1.0",
+  "title": "Well Planner",
+  "author": "Gloin the Dark",
+  "description": "Automatically layout pumpjack fields.",
+  "factorio_version": "0.18",
+  "dependencies": ["base >= 0.17.00"]
+}
