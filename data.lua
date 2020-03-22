@@ -17,6 +17,7 @@ data:extend(
             order = "c[automated-construction]-d[well-planner]",
             stack_size = 1,
             show_in_library = true,
+            -- TODO allow basic-fluid and water patch
             entity_filters = {"crude-oil"},
             alt_entity_filters = {"crude-oil"},
             can_be_mod_opened = true,

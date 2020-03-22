@@ -489,12 +489,62 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
   
 end
 
-
-
 local min_pipe_run = 2
+
+local function get_pumpjack_prototypes()
+  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "mining-drill"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local out = {}
+  for k, v in pairs(prototypes) do
+    if v.resource_categories["basic-fluid"] or v.resource_categories["water"] then
+      out[k] = v
+    end
+  end
+  return out
+end
+
+local function get_first_key_in_map(map)
+  for k,v in pairs(map) do
+    return k
+  end
+end
+
+local function get_prototype_from_config(prototypes, config_name)
+  local proto_name = global.config[config_name]
+  if proto_name == nil then
+    proto_name = get_first_key_in_map(prototypes)
+    global.config[config_name] = proto_name
+  end
+  local proto = prototypes[proto_name]
+  if proto == nil then
+    proto_name = get_first_key_in_map(prototypes)
+    global.config[config_name] = proto_name
+    proto = prototypes[proto_name]
+  end
+  return proto
+end
+
+local function get_pumpjack()
+  local prototypes = get_pumpjack_prototypes()
+  local config_name = "well_planner_pumpjack_type"
+  return get_prototype_from_config(prototypes, config_name)
+end
+
+local function get_pipe()
+  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "pipe"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local config_name = "well_planner_pipe_type"
+  return get_prototype_from_config(prototypes, config_name)
+end
+
+local function get_pipe_to_ground()
+  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "pipe-to-ground"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local config_name = "well_planner_pipe_to_ground_type"
+  return get_prototype_from_config(prototypes, config_name)
+end
 
 local function on_selected_area(event, deconstruct_friendly)
   init()
+
+  local pumpjack = get_pumpjack()
 
   local player = game.players[event.player_index]
   local surface = player.surface
@@ -515,7 +565,8 @@ local function on_selected_area(event, deconstruct_friendly)
     -- ghost entities are not "valid"
     if entity.valid then
       p = entity.prototype
-      if p.resource_category == "basic-fluid" then
+      -- TODO
+      if pumpjack.resource_categories[p.resource_category] then
         table.insert(fluid_patches, {position = entity.position})
         add_point(work_zone, entity.position)
       end	
@@ -540,7 +591,7 @@ local function on_selected_area(event, deconstruct_friendly)
 
   if #fluid_patches == 1 then
     local patch = fluid_patches[1]
-    place_ghost(state, "pumpjack", patch.position, defines.direction.north)
+    place_ghost(state, pumpjack.name, patch.position, defines.direction.north)
     return
   end
 
@@ -619,7 +670,7 @@ local function on_selected_area(event, deconstruct_friendly)
         pipes_to_place[key(node.position)] = node
         
         if node.patch then
-          place_ghost(state, "pumpjack", node.patch.position, node.direction)
+          place_ghost(state, pumpjack.name, node.patch.position, node.direction)
 
           node.patch = nil
 
@@ -638,9 +689,20 @@ local function on_selected_area(event, deconstruct_friendly)
     end
   end
 
-  if global.config.well_planner_use_pipe_to_ground == true then
   -- convert to undergropund pipes
-    pipe_zone = {}
+  if global.config.well_planner_use_pipe_to_ground == true then
+    local pipe_to_ground = get_pipe_to_ground()
+    local fb = pipe_to_ground.fluidbox_prototypes[1]
+    local mud = 10
+    for k, v in pairs(fb.pipe_connections) do
+      if v.max_underground_distance then
+        mud = v.max_underground_distance
+      end
+    end
+
+    log("max_underground_distance = " .. mud)
+
+    local pipe_zone = {}
     for k, node in pairs(pipes_to_place) do
       add_point(pipe_zone, node.position)
     end
@@ -675,17 +737,17 @@ local function on_selected_area(event, deconstruct_friendly)
             for i = 1, count do
               table.insert(pipes_to_delete, (col - i) .. "," .. row)
             end
-            local segments = math.floor((count + 10) / 11)
+            local segments = math.floor((count + mud) / (mud + 1))
             for segment = 0, segments - 1 do
               local segment_start = math.floor(count * segment / segments)
               local segment_end = math.floor(count * (segment + 1) / segments) - 1
 
               local pos1 = {x = col - segment_start - 0.5, y = row + 0.5}
-              place_ghost(state, "pipe-to-ground", pos1, defines.direction.east)
+              place_ghost(state, pipe_to_ground.name, pos1, defines.direction.east)
               table.insert(pipes_to_ground, key(pos1))
 
               local pos2 = {x = col - segment_end - 0.5, y = row + 0.5}
-              place_ghost(state, "pipe-to-ground", pos2, defines.direction.west)
+              place_ghost(state, pipe_to_ground.name, pos2, defines.direction.west)
               table.insert(pipes_to_ground, key(pos2))
             end
           end
@@ -714,17 +776,17 @@ local function on_selected_area(event, deconstruct_friendly)
             for i = 1, count do
               table.insert(pipes_to_delete, col .. "," .. (row - i))
             end
-            local segments = math.floor((count + 10) / 11)
+            local segments = math.floor((count + mud) / (mud + 1))
             for segment = 0, segments - 1 do
               local segment_start = math.floor(count * segment / segments)
               local segment_end = math.floor(count * (segment + 1) / segments) - 1
 
               local pos1 = {x = col + 0.5, y = row - segment_start - 0.5}
-              place_ghost(state, "pipe-to-ground", pos1, defines.direction.south)
+              place_ghost(state, pipe_to_ground.name, pos1, defines.direction.south)
               table.insert(pipes_to_ground, key(pos1))
               
               local pos2 = {x = col + 0.5, y = row - segment_end - 0.5}
-              place_ghost(state, "pipe-to-ground", pos2, defines.direction.north)
+              place_ghost(state, pipe_to_ground.name, pos2, defines.direction.north)
               table.insert(pipes_to_ground, key(pos2))
             end
           end
@@ -744,8 +806,9 @@ local function on_selected_area(event, deconstruct_friendly)
   end
 
   -- connect with pipes
+  local pipe_proto = get_pipe()
   for k, node in pairs(pipes_to_place) do
-    place_ghost(state, "pipe", node.position)
+    place_ghost(state, pipe_proto.name, node.position)
     blockers_map[node.key] = true
   end
 
@@ -756,12 +819,12 @@ local function on_selected_area(event, deconstruct_friendly)
   end
 
   if global.config.well_planner_place_power_poles then
-    local ppt = global.config.well_planner_power_pole_type
-    if ppt == nil then
-      ppt = "small-electric-pole"
+    local stored_item_type = global.config.well_planner_power_pole_type
+    if stored_item_type == nil then
+      stored_item_type = "small-electric-pole"
     end
     local power_poles = game.get_filtered_entity_prototypes({{filter = "type", type = "electric-pole"}, {filter = "flag", flag = "player-creation", mode = "and"}})
-    local power_pole_proptotype = power_poles[ppt]
+    local power_pole_proptotype = power_poles[stored_item_type]
 
     if power_pole_proptotype == nil then
       for k,v in pairs(power_poles) do
@@ -775,8 +838,52 @@ local function on_selected_area(event, deconstruct_friendly)
   end
 end
 
-function gui_open_close_frame(player)
+local function item_selector_flow_2(frame, config_name, prototypes, player)
+  local flow = frame.add(
+    {
+      type = "flow",
+      name = config_name,
+      direction = "horizontal",
+      enabled = true,
+    }
+  )
+  
+  local stored_item_type = global.config[config_name]
+  
+  local inv = player.get_main_inventory()
+  
+  for entity_id, ppp in pairs(prototypes) do
+    
+    if stored_item_type == nil then
+      stored_item_type = entity_id
+    end
+    
+    local button_name = config_name .. "_" .. entity_id
+    local style = "CGUI_logistic_slot_button"
+    if stored_item_type == entity_id then
+      style = "CGUI_yellow_logistic_slot_button"
+    end
+    flow.add (
+      {
+        name = button_name,
+        type = "sprite-button",
+        sprite = "entity/" .. entity_id,
+        style = style,
+        tooltip = ppp.localised_name,
+        number = inv.get_item_count(entity_id),
+      }
+    )  
+  end
+  
+  return flow
+end
 
+local function item_selector_flow(frame, config_name, type, player)
+  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = type}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  return item_selector_flow_2(frame, config_name, prototypes, player)
+end
+
+function gui_open_close_frame(player)
   init()
 
   local flow = player.gui.center
@@ -797,6 +904,24 @@ function gui_open_close_frame(player)
     direction = "vertical"
   }
 
+
+  frame.add(
+    {
+      type = "label",
+      caption = {"well-planner.pumpjacks"},
+    }
+  )
+
+  item_selector_flow_2(frame, "well_planner_pumpjack_type", get_pumpjack_prototypes(), player)
+
+  frame.add(
+    {
+      type = "label",
+      caption = {"well-planner.pipes"},
+    }
+  )
+  item_selector_flow(frame, "well_planner_pipe_type", "pipe", player)
+
   frame.add(
     {
       type = "checkbox",
@@ -806,6 +931,9 @@ function gui_open_close_frame(player)
       tooltip = {"well-planner.use_pipe_to_ground_tooltip"},
     }
   )
+
+  item_selector_flow(frame, "well_planner_pipe_to_ground_type", "pipe-to-ground", player)
+
   frame.add(
     {
       type = "checkbox",
@@ -816,42 +944,9 @@ function gui_open_close_frame(player)
     }
   )
 
-  local pole_flow = frame.add(
-    {
-      type = "flow",
-      name = "well_planner_pole_flow",
-      direction = "horizontal",
-      enabled = global.config.well_planner_place_power_poles == true,
-    }
-  )
 
-  local power_poles = game.get_filtered_entity_prototypes({{filter = "type", type = "electric-pole"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  item_selector_flow(frame, "well_planner_power_pole_type", "electric-pole", player)
 
-  local ppt = global.config.well_planner_power_pole_type
-
-  local inv = player.get_main_inventory()
-
-  for entity_id, ppp in pairs(power_poles) do
-    if ppt == nil then
-      ppt = entity_id
-    end
-
-    local button_name = "well_planner_power_pole_type" .. "_" .. entity_id
-    local style = "CGUI_logistic_slot_button"
-    if ppt == entity_id then
-      style = "CGUI_yellow_logistic_slot_button"
-    end
-    pole_flow.add (
-      {
-        name = button_name,
-        type = "sprite-button",
-        sprite = "entity/" .. entity_id,
-        style = style,
-        tooltip = ppp.localised_name,
-        number = inv.get_item_count(entity_id),
-      }
-    )  
-  end
 
   frame.add(
     {
@@ -875,13 +970,14 @@ script.on_event(
     if name == "well_planner_close_button" then
       local player = game.players[event.player_index]
       gui_open_close_frame(player)    
-    elseif name:starts_with("well_planner_power_pole_type") then
-      for _, v in pairs(event.element.parent.children) do
-        v.style = "CGUI_logistic_slot_button"
+    elseif name:starts_with("well_planner_") and event.element.parent.type == "flow" then
+      local config_key = event.element.parent.name
+      for _, sibling in pairs(event.element.parent.children) do
+        sibling.style = "CGUI_logistic_slot_button"
       end
       event.element.style = "CGUI_yellow_logistic_slot_button"
-      local ppt = name:sub(string.len("well_planner_power_pole_type") + 2)
-      global.config.well_planner_power_pole_type = ppt
+      local stored_item_type = name:sub(string.len(config_key) + 2)
+      global.config[config_key] = stored_item_type
     end
   end
 )
@@ -891,7 +987,6 @@ script.on_event(
   function(event)
     if event.element.name:starts_with("well_planner_") then
       global.config[event.element.name] = event.element.state
-      event.element.parent.well_planner_pole_flow.enabled = global.config.well_planner_place_power_poles == true
     end
   end
 )
