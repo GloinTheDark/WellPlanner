@@ -1,7 +1,6 @@
 require("mod-gui")
 PriorityQueue = require("priority_queue")
 
-
 function string:starts_with(prefix)
   return string.find(self, prefix) == 1
 end
@@ -27,7 +26,6 @@ function table.clone(org)
   end
   return copy
 end
-
 
 local pump_neighbors = {
   {x = 1, y = -2, direction = defines.direction.north},
@@ -87,7 +85,11 @@ local function make_neighbors(parent)
   return nodes
 end
 
-local function a_star(start_nodes, goal_nodes, blockers_map)
+local function point_in_box(box, point)
+  return point.x >= box.left_top.x and point.x <= box.right_bottom.x and point.y >= box.left_top.y and point.y <= box.right_bottom.y
+end
+
+local function a_star(start_nodes, goal_nodes, blockers_map, work_zone)
   local search_queue = PriorityQueue:new()
   local count = 0
 
@@ -107,23 +109,25 @@ local function a_star(start_nodes, goal_nodes, blockers_map)
     local best = search_queue:pop()
 
     for _, n in ipairs(make_neighbors(best)) do
-      if not blockers_map[n.key] then
-        local o = all_nodes_map[n.key]
-        if o == nil or n.g_score < o.g_score then
-          local h = heuristicScore(goal_nodes, n)
-          if h == 0 then
-            for _, g in ipairs(goal_nodes) do
-              if g.key == n.key then
-                g.parent = n.parent
-                return g
-              end
-            end 
-            return n
+      if point_in_box(work_zone, n.position) then
+        if not blockers_map[n.key] then
+          local o = all_nodes_map[n.key]
+          if o == nil or n.g_score < o.g_score then
+            local h = heuristicScore(goal_nodes, n)
+            if h == 0 then
+              for _, g in ipairs(goal_nodes) do
+                if g.key == n.key then
+                  g.parent = n.parent
+                  return g
+                end
+              end 
+              return n
+            end
+            n.f_score = n.g_score + h
+            all_nodes_map[n.key] = n
+            search_queue:put(n, n.f_score * 1000 + count)
+            count = count + 1
           end
-          n.f_score = n.g_score + h
-          all_nodes_map[n.key] = n
-          search_queue:put(n, n.f_score * 1000 + count)
-          count = count + 1
         end
       end
     end
@@ -557,26 +561,42 @@ local function on_selected_area(event, deconstruct_friendly)
     surface = surface,
   }
 
-  local fluid_patches = {}
-
-  -- find oil patches...
-  work_zone = {}
-  for i, entity in ipairs(event.entities) do
+  -- find liquid resource patches...
+  local patches_by_resource = {}
+  for _, entity in pairs(event.entities) do
     -- ghost entities are not "valid"
     if entity.valid then
       p = entity.prototype
-      -- TODO
       if pumpjack.resource_categories[p.resource_category] then
+
+        local fluid_patches = patches_by_resource[p.name]
+        if not fluid_patches then
+          fluid_patches = {}
+          patches_by_resource[p.name] = fluid_patches
+        end
+        
         table.insert(fluid_patches, {position = entity.position})
-        add_point(work_zone, entity.position)
       end	
     end	
+  end
+
+  -- find the resource with the most patches
+  local fluid_patches = {}
+  for k, v in pairs(patches_by_resource) do
+    if #v > #fluid_patches then
+      fluid_patches = v
+    end
   end
   
   if #fluid_patches == 0 then
     return
   end
 
+  -- define a work zone around the fluid patches
+  work_zone = {}
+  for _, v in pairs(fluid_patches) do
+    add_point(work_zone, v.position)
+  end
   expand_box(work_zone, 3)
 
   -- Deconstruct anything in the area
@@ -587,7 +607,6 @@ local function on_selected_area(event, deconstruct_friendly)
     skip_fog_of_war = true,
   }
   surface.deconstruct_area(da)
-
 
   if #fluid_patches == 1 then
     local patch = fluid_patches[1]
@@ -660,9 +679,9 @@ local function on_selected_area(event, deconstruct_friendly)
       goals = makeNodesFromPatch(patch)
     else
       starts = makeNodesFromPatch(patch)
-      local node = a_star(starts, goals, blockers_map)
+      local node = a_star(starts, goals, blockers_map, work_zone)
 
-      if i == 2 then
+      if i == 2 and node ~= nil then
         goals = {}
       end
 
@@ -699,8 +718,6 @@ local function on_selected_area(event, deconstruct_friendly)
         mud = v.max_underground_distance
       end
     end
-
-    log("max_underground_distance = " .. mud)
 
     local pipe_zone = {}
     for k, node in pairs(pipes_to_place) do
