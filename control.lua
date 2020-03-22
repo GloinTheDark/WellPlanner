@@ -499,7 +499,7 @@ local function get_pumpjack_prototypes()
   local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "mining-drill"}, {filter = "flag", flag = "player-creation", mode = "and"}})
   local out = {}
   for k, v in pairs(prototypes) do
-    if v.resource_categories["basic-fluid"] or v.resource_categories["water"] then
+    if not v.resource_categories["basic-solid"] then
       out[k] = v
     end
   end
