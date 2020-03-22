@@ -1,0 +1,19 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 22. 03. 2020
+  Info:
+    - Updated to work with Bob's Mods
+  Changes:
+    - Added selector to settings to chose from available pumpjacks, pipes, and pipes to ground.
+    - Added tooltips to item buttons with the name of the item.
+    - Added count to item buttons to show your current inventory count.
+    - Added support for different fluid resource types. (Such as water and lithium water, etc.)
+    - If you select multiple resource types, it will only mine the resource with the most patches.
+    - Added logic to prevent placing pumpjacks on invalid resources. (Can't place a water pumpjack on a crude oil patch.)
+  Bugfixes:
+    - Fixed potential lockup when trying to route impossible pipe connections
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 21. 03. 2020
+  Info:
+    - Initial Release
