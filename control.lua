@@ -563,6 +563,7 @@ local function on_selected_area(event, deconstruct_friendly)
 
   -- find liquid resource patches...
   local patches_by_resource = {}
+  local bad_resource_type
   for _, entity in pairs(event.entities) do
     -- ghost entities are not "valid"
     if entity.valid then
@@ -576,6 +577,8 @@ local function on_selected_area(event, deconstruct_friendly)
         end
         
         table.insert(fluid_patches, {position = entity.position})
+      else
+        bad_resource_type = p.localised_name
       end	
     end	
   end
@@ -589,6 +592,11 @@ local function on_selected_area(event, deconstruct_friendly)
   end
   
   if #fluid_patches == 0 then
+    if bad_resource_type then
+      player.print({"well-planner.bad_resoure", pumpjack.localised_name, bad_resource_type})
+    else
+      player.print({"well-planner.no_resoures"})
+    end
     return
   end
 
