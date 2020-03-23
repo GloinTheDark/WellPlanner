@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.18.2
+Date: 23. 03. 2020
+  Info:
+    - Updated to work with Krastorio 2
+    - It's my birthday.
+  Changes:
+    - Always place pumpjacks even if they can't be connected by pipes.
+    - Added message to user when some pumpjacks can't be connected.
+  Bugfixes:
+    - Fixed potential lockup when trying to place electric poles
+    - Fixed: Well planner was selecting basic-solid resources by mistake
+---------------------------------------------------------------------------------------------------
 Version: 0.1.1
 Date: 22. 03. 2020
   Info:

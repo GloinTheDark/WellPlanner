@@ -1,12 +1,10 @@
-
-
-
-
+local pumpable_resource_categories = require("pumpable")
 
 local resource_names = {}
 for name,resource in pairs(data.raw["resource"]) do
-    if resource.catagory ~= "basic-solid" then
+    if pumpable_resource_categories[resource.category] then
         table.insert(resource_names, name)
+        -- log(name)
     end
 end
 

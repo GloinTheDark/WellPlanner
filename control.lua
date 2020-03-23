@@ -1,5 +1,6 @@
-require("mod-gui")
-PriorityQueue = require("priority_queue")
+-- require("mod-gui")
+local PriorityQueue = require("priority_queue")
+local pumpable_resource_categories = require("pumpable")
 
 function string:starts_with(prefix)
   return string.find(self, prefix) == 1
@@ -286,11 +287,14 @@ end
 local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, width, height)
   local p1, p2 = find_closest_poles(g1, g2)
 
+
+  -- log("connect_2_pole_groups 1")
   -- loop until we can merge the two groups or we fail to find a pole between them
   while true do
     local box = {}
     add_point(box, p1)
     add_point(box, p2)
+    expand_box(box, 10)
     
     local best_score = 0
     local best_error = math.huge
@@ -301,11 +305,12 @@ local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, w
         local pos = {x = x, y = y}
         if not_blocked(blockers_map, pos, width, height) then
           local ds1 = dist_squared(pos, p1)
-          local ds2 = dist_squared(pos, p2)
-          if ds1 <= wire_range_squared then
+          if ds1 > 0 and ds1 <= wire_range_squared then
             score = score + 1
           end
-          if ds2 <= wire_range_squared then
+
+          local ds2 = dist_squared(pos, p2)
+          if ds2 > 0 and ds2 <= wire_range_squared then
             score = score + 2
           end
 
@@ -408,8 +413,12 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
   local wire_range = pole_prototype.max_wire_distance
   local wire_range_squared = wire_range * wire_range
 
+  -- log("placing power poles")
+
   while #consumers > 0 do
-    
+    -- log("#consumers = " .. #consumers)
+
+    -- find the pole location that powers the most consumers
     local best_score = 0
     for x = work_zone.left_top.x - width_adjust, work_zone.right_bottom.x + width_adjust do
       for y = work_zone.left_top.y - height_adjust, work_zone.right_bottom.y + height_adjust do
@@ -483,8 +492,13 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
     consumers = new_consumers
   end
 
+  -- log("done powering consumers")
+
   pole_groups = connect_pole_groups(pole_groups, blockers_map, wire_range_squared, width, height)
 
+  -- log("done connect groups of poles")
+
+  -- place poles
   for _, pg in ipairs(pole_groups) do
     for _, p in ipairs(pg) do
       place_ghost(state, pole_prototype.name, p)
@@ -493,14 +507,14 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
   
 end
 
-local min_pipe_run = 2
-
 local function get_pumpjack_prototypes()
   local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "mining-drill"}, {filter = "flag", flag = "player-creation", mode = "and"}})
   local out = {}
-  for k, v in pairs(prototypes) do
-    if not v.resource_categories["basic-solid"] then
-      out[k] = v
+  for name, prototype in pairs(prototypes) do
+    for category in pairs(prototype.resource_categories) do
+      if pumpable_resource_categories[category] then
+        out[name] = prototype
+      end
     end
   end
   return out
@@ -622,6 +636,8 @@ local function on_selected_area(event, deconstruct_friendly)
     return
   end
 
+  -- build the blockers map
+  -- map of all tile locations where we cant build
   local blockers_map = {}
   local min, max
 
@@ -643,9 +659,15 @@ local function on_selected_area(event, deconstruct_friendly)
       end
     end
   end
+  -- find the center of the patches
+  local center = {
+    x = (min.x + max.x) / 2,
+    y = (min.y + max.y) / 2,
+  }
 
   -- dont build on water tiles
   local tiles = surface.find_tiles_filtered{
+    -- TODO dont hard-code
     area = work_zone,
     name = {     
       "water",
@@ -660,12 +682,6 @@ local function on_selected_area(event, deconstruct_friendly)
     blockers_map[key(t.position)] = true
   end
 
-  -- find the center of the patches
-  local center = {
-    x = (min.x + max.x) / 2,
-    y = (min.y + max.y) / 2,
-  }
-
   -- add the patches to a queue
   -- patches closest to the center go first
   local patch_queue = PriorityQueue:new()
@@ -673,6 +689,8 @@ local function on_selected_area(event, deconstruct_friendly)
     patch_queue:put(patch, dist_squared(center, patch.position))
   end
 
+
+  -- pathfind for pipes
   local goals
   local starts
     
@@ -689,6 +707,12 @@ local function on_selected_area(event, deconstruct_friendly)
       starts = makeNodesFromPatch(patch)
       local node = a_star(starts, goals, blockers_map, work_zone)
 
+      -- if node == nil then
+      --   log("astar failed")
+      -- else
+      --   log("astar succeded")
+      -- end
+
       if i == 2 and node ~= nil then
         goals = {}
       end
@@ -697,7 +721,7 @@ local function on_selected_area(event, deconstruct_friendly)
         pipes_to_place[key(node.position)] = node
         
         if node.patch then
-          place_ghost(state, pumpjack.name, node.patch.position, node.direction)
+          node.patch.direction = node.direction
 
           node.patch = nil
 
@@ -715,6 +739,19 @@ local function on_selected_area(event, deconstruct_friendly)
       end      
     end
   end
+
+  -- place ghosts for pumps
+  local unconnected_pumps = 0
+  for _, patch in pairs(fluid_patches) do
+    if not patch.direction then
+      unconnected_pumps = unconnected_pumps + 1
+    end
+    place_ghost(state, pumpjack.name, patch.position, patch.direction)
+  end
+  if unconnected_pumps > 0 then
+    player.print({"well-planner.cant_connect", ""..unconnected_pumps, pumpjack.localised_name})
+  end
+
 
   -- convert to undergropund pipes
   if global.config.well_planner_use_pipe_to_ground == true then
@@ -741,6 +778,8 @@ local function on_selected_area(event, deconstruct_friendly)
 
     local pipes_to_delete = {}
     local pipes_to_ground = {}
+
+    local min_pipe_run = 2
 
     -- replace east-west runs of pipe with pipe-to-ground
     for row = top, bottom do
@@ -837,13 +876,13 @@ local function on_selected_area(event, deconstruct_friendly)
     blockers_map[node.key] = true
   end
 
-  -- power the area
-  local consumers = {}
-  for i, p in ipairs(fluid_patches) do
-    table.insert(consumers, {position = p.position, size = 1.5})
-  end
-
   if global.config.well_planner_place_power_poles then
+    -- log("place electric poles")
+    local consumers = {}
+    for i, p in ipairs(fluid_patches) do
+      table.insert(consumers, {position = p.position, size = 1.5})
+    end
+  
     local stored_item_type = global.config.well_planner_power_pole_type
     if stored_item_type == nil then
       stored_item_type = "small-electric-pole"
