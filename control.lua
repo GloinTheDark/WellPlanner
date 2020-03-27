@@ -537,9 +537,12 @@ end
 local function get_items_of_entity_type(type)
   out = {}
   for name, item in pairs(game.item_prototypes) do
-    if item.place_result and item.place_result.type == type then
+    local entity = item.place_result
+    if entity and entity.type == type then
       if item.name == item.place_result.name then
-        out[name] = item
+        if entity.has_flag("player-creation") then
+          out[name] = item
+        end
       end
     end  
   end
@@ -606,16 +609,16 @@ local function get_electric_pole()
 end
 
 local function init()
-  get_pumpjack()
-  get_pipe()
-  get_pipe_to_ground()
-  get_electric_pole()
   if not global.config then
     global.config = {
       well_planner_use_pipe_to_ground = true,
       well_planner_place_electric_poles = true,      
     }
   end
+  get_pumpjack()
+  get_pipe()
+  get_pipe_to_ground()
+  get_electric_pole()
 end
 
 local function profile_checkpoint(tag)
@@ -771,6 +774,7 @@ local function on_selected_area(event, deconstruct_friendly)
   local i = 0
 
   local pipes_to_place = {}
+  local got_pipes = false
   while not patch_queue:empty() do
     i = i + 1
     local patch = patch_queue:pop()
@@ -793,6 +797,7 @@ local function on_selected_area(event, deconstruct_friendly)
 
       while node do
         pipes_to_place[key(node.position)] = node
+        got_pipes = true
         
         if node.patch then
           node.patch.direction = node.direction
@@ -834,7 +839,7 @@ local function on_selected_area(event, deconstruct_friendly)
   profiler:reset()
 
   -- convert to underground pipes
-  if global.config.well_planner_use_pipe_to_ground == true and #pipes_to_place > 0 then
+  if global.config.well_planner_use_pipe_to_ground == true and got_pipes then
     local pipe_to_ground = get_pipe_to_ground().place_result
     local fb = pipe_to_ground.fluidbox_prototypes[1]
     local mud = 10
