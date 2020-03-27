@@ -1,4 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.18.3
+Date: 26. 03. 2020
+  Info:
+    - Updated to work with Pipelayer mod
+  Changes:
+    - Performance improvements
+  Bugfixes:
+    - Fixed crash with Pipelayer mod
+---------------------------------------------------------------------------------------------------
 Version: 0.18.2
 Date: 23. 03. 2020
   Info:

@@ -11,15 +11,6 @@ local function key(position)
     return math.floor(position.x) .. "," .. math.floor(position.y)
 end
 
-local function init()
-  if not global.config then
-    global.config = {
-      well_planner_use_pipe_to_ground = true,
-      well_planner_place_power_poles = true,      
-    }
-  end
-end
-
 function table.clone(org)
   local copy = {}
   for k, v in pairs(org) do
@@ -53,7 +44,21 @@ local function makeNodesFromPatch(patch)
   return nodes
 end
 
-local function heuristicScore(goals, node)
+local function dist_squared(a, b)
+  local dx = a.x - b.x
+  local dy = a.y - b.y
+  return dx * dx + dy * dy
+end
+
+local function heuristic_score_crow(goals, node)
+  local score = math.huge
+  for _, goal in ipairs(goals) do
+    score = math.min(score, dist_squared(goal, node))
+  end
+  return math.sqrt(score)
+end
+
+local function heuristic_score_taxicab(goals, node)
   local score = math.huge
   for _, goal in ipairs(goals) do
     score = math.min(score, math.abs(goal.position.x - node.position.x) + math.abs(goal.position.y - node.position.y))
@@ -67,7 +72,6 @@ local pipe_neighbors = {
   {x = 0, y = 1},
   {x = -1, y = 0},  
 }
-
 
 local function make_neighbors(parent)
   local nodes = {}
@@ -90,7 +94,7 @@ local function point_in_box(box, point)
   return point.x >= box.left_top.x and point.x <= box.right_bottom.x and point.y >= box.left_top.y and point.y <= box.right_bottom.y
 end
 
-local function a_star(start_nodes, goal_nodes, blockers_map, work_zone)
+local function a_star(start_nodes, goal_nodes, blockers_map, work_zone, heuristic_score)
   local search_queue = PriorityQueue:new()
   local count = 0
 
@@ -99,7 +103,7 @@ local function a_star(start_nodes, goal_nodes, blockers_map, work_zone)
   for _, node in ipairs(start_nodes) do
     if not blockers_map[node.key] then
       node.g_score = 0
-      node.f_score = 0 + heuristicScore(goal_nodes, node)
+      node.f_score = 0 + heuristic_score(goal_nodes, node)
       all_nodes_map[node.key] = node
       search_queue:put(node, node.f_score * 1000 + count)
       count = count + 1
@@ -109,24 +113,24 @@ local function a_star(start_nodes, goal_nodes, blockers_map, work_zone)
   while not search_queue:empty() do
     local best = search_queue:pop()
 
-    for _, n in ipairs(make_neighbors(best)) do
-      if point_in_box(work_zone, n.position) then
-        if not blockers_map[n.key] then
-          local o = all_nodes_map[n.key]
-          if o == nil or n.g_score < o.g_score then
-            local h = heuristicScore(goal_nodes, n)
+    for _, node in ipairs(make_neighbors(best)) do
+      if point_in_box(work_zone, node.position) then
+        if not blockers_map[node.key] then
+          local o = all_nodes_map[node.key]
+          if o == nil or node.g_score < o.g_score then
+            local h = heuristic_score(goal_nodes, node)
             if h == 0 then
               for _, g in ipairs(goal_nodes) do
-                if g.key == n.key then
-                  g.parent = n.parent
+                if g.key == node.key then
+                  g.parent = node.parent
                   return g
                 end
               end 
-              return n
+              return node
             end
-            n.f_score = n.g_score + h
-            all_nodes_map[n.key] = n
-            search_queue:put(n, n.f_score * 1000 + count)
+            node.f_score = node.g_score + h
+            all_nodes_map[node.key] = node
+            search_queue:put(node, node.f_score * 1000 + count)
             count = count + 1
           end
         end
@@ -149,12 +153,6 @@ local function max_pos(a, b)
     x = math.max(a.x, b.x),
     y = math.max(a.y, b.y)
   }
-end
-
-local function dist_squared(a, b)
-  local dx = a.x - b.x
-  local dy = a.y - b.y
-  return dx * dx + dy * dy
 end
 
 local function log_object(o)
@@ -181,7 +179,7 @@ local function expand_box(box, amount)
   box.right_bottom.y = box.right_bottom.y + amount
 end
 
-local function place_ghost(state, prototype_name, position, direction)
+local function place_ghost(state, prototype_name, position, direction, modules)
   local args = {}
   args.name = "entity-ghost"
   args.inner_name = prototype_name
@@ -189,8 +187,10 @@ local function place_ghost(state, prototype_name, position, direction)
   args.direction = direction
   args.force = state.force
   args.player = state.player
-  args.raise_built = true
-  state.surface.create_entity(args)	
+  local ghost = state.surface.create_entity(args)
+  if modules then
+    ghost.item_requests = modules
+  end
 end
 
 local function distance_error(position_groups, position)
@@ -258,23 +258,23 @@ end
 
 -- fast merge 2 tables
 local function fast_merge(t1, t2)
-  local count = #t1
-  local len = #t2
-  for i = 1, len do
-    t1[i+count] = t2[i]
+  local len1 = #t1
+  local len2 = #t2
+  for i = 1, len2 do
+    t1[i + len1] = t2[i]
   end
 end
 
-local function not_blocked(blockers_map, position, width, height) 
-  local width_adjust = (width - 1) / 2
-  local height_adjust = (height - 1) / 2
+local function not_blocked(blockers_map, position, pole_width, pole_height) 
+  local width_adjust = (pole_width - 1) / 2
+  local height_adjust = (pole_height - 1) / 2
 
   local x1 = position.x - width_adjust
   local y1 = position.y - height_adjust
 
-  for x = 0, width - 1 do
+  for x = 0, pole_width - 1 do
     local x2 = x1 + x
-    for y = 0, height - 1 do
+    for y = 0, pole_height - 1 do
       local y2 = y1 + y
       if blockers_map[key({x = x2, y = y2})] then 
         return false
@@ -284,7 +284,7 @@ local function not_blocked(blockers_map, position, width, height)
   return true
 end
 
-local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, width, height)
+local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, pole_width, pole_height)
   local p1, p2 = find_closest_poles(g1, g2)
 
 
@@ -303,7 +303,7 @@ local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, w
       for y = box.left_top.y, box.right_bottom.y do
         local score = 0
         local pos = {x = x, y = y}
-        if not_blocked(blockers_map, pos, width, height) then
+        if not_blocked(blockers_map, pos, pole_width, pole_height) then
           local ds1 = dist_squared(pos, p1)
           if ds1 > 0 and ds1 <= wire_range_squared then
             score = score + 1
@@ -356,12 +356,12 @@ local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, w
 end
 
 -- pole_groups = connect_pole_groups(pole_groups, blockers_map)
-local function connect_pole_groups(pole_groups, blockers_map, wire_range_squared, width, height)
+local function connect_pole_groups(pole_groups, blockers_map, wire_range_squared, pole_width, pole_height)
   while true do
     if #pole_groups < 2 then
       return pole_groups
     elseif #pole_groups == 2 then
-      return connect_2_pole_groups(pole_groups[1], pole_groups[2], blockers_map, wire_range_squared, width, height)
+      return connect_2_pole_groups(pole_groups[1], pole_groups[2], blockers_map, wire_range_squared, pole_width, pole_height)
     end
 
     local error = math.huge
@@ -393,59 +393,81 @@ local function connect_pole_groups(pole_groups, blockers_map, wire_range_squared
         g2[count] = pole_groups[i]
       end
     end
-    local new_groups = connect_2_pole_groups(pole_groups[1], pole_groups[j], blockers_map, wire_range_squared, width, height)
+    local new_groups = connect_2_pole_groups(pole_groups[1], pole_groups[j], blockers_map, wire_range_squared, pole_width, pole_height)
     fast_merge(g2, new_groups)
     pole_groups = g2
   end
 end
 
+-- TODO NEED TO ADD POLES TO BLOCKERS AS WE ADD THEM SO WE DONT PLACE 2 POLES ON TOP OF EACH OTHER
+
 -- blockers_map map of blocked squares
 -- consumers - items that need power {position, size}
--- pole_prototype - the prototype of the power pole to use
-local function place_power_poles(blockers_map, consumers, pole_prototype, work_zone, state)
+-- pole_prototype - the prototype of the electric pole to use
+local function place_electric_poles(blockers_map, consumers, pole_prototype, work_zone, state)
   pole_groups = {}
 
-  local width = math.ceil(pole_prototype.selection_box.right_bottom.x - pole_prototype.selection_box.left_top.x)
-  local width_adjust = (width - 1) / 2
-  local height = math.ceil(pole_prototype.selection_box.right_bottom.y - pole_prototype.selection_box.left_top.y)
-  local height_adjust = (height - 1) / 2
+  local pole_width = math.ceil(pole_prototype.selection_box.right_bottom.x - pole_prototype.selection_box.left_top.x)
+  local width_adjust = (pole_width - 1) / 2
+  local pole_height = math.ceil(pole_prototype.selection_box.right_bottom.y - pole_prototype.selection_box.left_top.y)
+  local height_adjust = (pole_height - 1) / 2
 
   local wire_range = pole_prototype.max_wire_distance
   local wire_range_squared = wire_range * wire_range
 
-  -- log("placing power poles")
+  log("finding pole_positions")
+  state.profiler:reset()
+
+  -- make a list of valid pole positions
+  -- TODO: optimize for 2x2 poles
+  local pole_positions = {}
+  local pole_positions_count = 0
+  for x = work_zone.left_top.x - width_adjust, work_zone.right_bottom.x + width_adjust do
+    for y = work_zone.left_top.y - height_adjust, work_zone.right_bottom.y + height_adjust do
+      local pos = {x = x, y = y}
+      if not_blocked(blockers_map, pos, pole_width, pole_height) then
+        pole_positions_count = pole_positions_count + 1
+        pole_positions[pole_positions_count] = pos
+      end
+    end
+  end
+
+  log(state.profiler)
+  log("pole_positions_count = "..pole_positions_count)
+  log("placing electric poles")
+  state.profiler:reset()
 
   while #consumers > 0 do
-    -- log("#consumers = " .. #consumers)
+    log("#consumers = " .. #consumers)
 
+    local consumer_count = #consumers
+ 
     -- find the pole location that powers the most consumers
     local best_score = 0
-    for x = work_zone.left_top.x - width_adjust, work_zone.right_bottom.x + width_adjust do
-      for y = work_zone.left_top.y - height_adjust, work_zone.right_bottom.y + height_adjust do
-        local pos = {x = x, y = y}
-        if not_blocked(blockers_map, pos, width, height) then
-          local score = 0
-          for _, c in ipairs(consumers) do
-            local range = c.size + pole_prototype.supply_area_distance - 0.5
-            if math.abs(c.position.x - x) < range then
-              if math.abs(c.position.y - y) < range then
-                score = score + 1
-              end
-            end
-          end
-          
-          if score > best_score then
-            best_score = score
-            best_pos = pos
-          else
-            if score == best_score then
-              e1, e2 = distance_error2(pole_groups, pos, best_pos)
-              if e1 < e2 then
-                best_pos = pos
-              end
-            end
+    for i = 1, pole_positions_count do
+      local pos = pole_positions[i]
+      local score = 0
+
+      for j = 1, consumer_count do
+        local c = consumers[j]
+        local range = c.size + pole_prototype.supply_area_distance - 0.5
+        if math.abs(c.position.x - pos.x) < range then
+          if math.abs(c.position.y - pos.y) < range then
+            score = score + 1
           end
         end
+      end
+      
+      if score > best_score then
+        best_score = score
+        best_pos = pos
+      -- else
+      --   if score == best_score then
+      --     e1, e2 = distance_error2(pole_groups, pos, best_pos)
+      --     if e1 < e2 then
+      --       best_pos = pos
+      --     end
+      --   end
       end
     end
 
@@ -456,9 +478,9 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
     local new_group = {best_pos}
     local new_groups = {new_group}
     
-    for _, pg in ipairs(pole_groups) do
+    for _, pg in pairs(pole_groups) do
       local found = false
-      for _, p in ipairs(pg) do
+      for _, p in pairs(pg) do
         if dist_squared(p, best_pos) <= wire_range_squared then
           found = true
           break
@@ -476,7 +498,7 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
     pole_groups = new_groups
     
     local new_consumers = {}
-    for _, c in ipairs(consumers) do
+    for _, c in pairs(consumers) do
       local found = false
       local range = c.size + pole_prototype.supply_area_distance - 0.5
       if math.abs(c.position.x - best_pos.x) < range then
@@ -492,11 +514,15 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
     consumers = new_consumers
   end
 
-  -- log("done powering consumers")
-
-  pole_groups = connect_pole_groups(pole_groups, blockers_map, wire_range_squared, width, height)
-
-  -- log("done connect groups of poles")
+  log(state.profiler)
+  log("done powering consumers")
+  state.profiler:reset()
+  
+  pole_groups = connect_pole_groups(pole_groups, blockers_map, wire_range_squared, pole_width, pole_height)
+  
+  log(state.profiler)
+  log("done connect groups of poles")
+  state.profiler:reset()
 
   -- place poles
   for _, pg in ipairs(pole_groups) do
@@ -507,13 +533,27 @@ local function place_power_poles(blockers_map, consumers, pole_prototype, work_z
   
 end
 
+-- returns a map of items that place entities of type
+local function get_items_of_entity_type(type)
+  out = {}
+  for name, item in pairs(game.item_prototypes) do
+    if item.place_result and item.place_result.type == type then
+      if item.name == item.place_result.name then
+        out[name] = item
+      end
+    end  
+  end
+  return out
+end
+
 local function get_pumpjack_prototypes()
-  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "mining-drill"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local items = get_items_of_entity_type("mining-drill")
   local out = {}
-  for name, prototype in pairs(prototypes) do
-    for category in pairs(prototype.resource_categories) do
+  for name, item in pairs(items) do
+    local entity = item.place_result
+    for category in pairs(entity.resource_categories) do
       if pumpable_resource_categories[category] then
-        out[name] = prototype
+        out[name] = item
       end
     end
   end
@@ -548,21 +588,48 @@ local function get_pumpjack()
 end
 
 local function get_pipe()
-  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "pipe"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local prototypes = get_items_of_entity_type("pipe")
   local config_name = "well_planner_pipe_type"
   return get_prototype_from_config(prototypes, config_name)
 end
 
 local function get_pipe_to_ground()
-  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = "pipe-to-ground"}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local prototypes = get_items_of_entity_type("pipe-to-ground")
   local config_name = "well_planner_pipe_to_ground_type"
   return get_prototype_from_config(prototypes, config_name)
 end
 
+local function get_electric_pole()
+  local prototypes = get_items_of_entity_type("electric-pole")
+  local config_name = "well_planner_electric_pole_type"
+  return get_prototype_from_config(prototypes, config_name)
+end
+
+local function init()
+  get_pumpjack()
+  get_pipe()
+  get_pipe_to_ground()
+  get_electric_pole()
+  if not global.config then
+    global.config = {
+      well_planner_use_pipe_to_ground = true,
+      well_planner_place_electric_poles = true,      
+    }
+  end
+end
+
+local function profile_checkpoint(tag)
+  log(tag)
+end  
+
 local function on_selected_area(event, deconstruct_friendly)
   init()
 
-  local pumpjack = get_pumpjack()
+  local total_profiler = game.create_profiler()
+  local profiler = game.create_profiler()
+  profile_checkpoint("find patches")
+
+  local pumpjack = get_pumpjack().place_result
 
   local player = game.players[event.player_index]
   local surface = player.surface
@@ -630,11 +697,14 @@ local function on_selected_area(event, deconstruct_friendly)
   }
   surface.deconstruct_area(da)
 
-  if #fluid_patches == 1 then
-    local patch = fluid_patches[1]
-    place_ghost(state, pumpjack.name, patch.position, defines.direction.north)
-    return
-  end
+  -- if #fluid_patches == 1 then
+    -- local patch = fluid_patches[1]
+    -- todo place modules if pumpjack.module_inventory_size and pumpjack.module_inventory_size > 0
+    -- local modules = {["speed-module-3"] = 1}
+    -- place_ghost(state, pumpjack.name, patch.position, defines.direction.north, modules)
+  --   place_ghost(state, pumpjack.name, patch.position, defines.direction.north)
+  --   return
+  -- end
 
   -- build the blockers map
   -- map of all tile locations where we cant build
@@ -682,6 +752,10 @@ local function on_selected_area(event, deconstruct_friendly)
     blockers_map[key(t.position)] = true
   end
 
+  log(profiler)
+  profile_checkpoint("route pipes")
+  profiler:reset()
+
   -- add the patches to a queue
   -- patches closest to the center go first
   local patch_queue = PriorityQueue:new()
@@ -705,7 +779,7 @@ local function on_selected_area(event, deconstruct_friendly)
       goals = makeNodesFromPatch(patch)
     else
       starts = makeNodesFromPatch(patch)
-      local node = a_star(starts, goals, blockers_map, work_zone)
+      local node = a_star(starts, goals, blockers_map, work_zone, heuristic_score_taxicab)
 
       -- if node == nil then
       --   log("astar failed")
@@ -746,16 +820,22 @@ local function on_selected_area(event, deconstruct_friendly)
     if not patch.direction then
       unconnected_pumps = unconnected_pumps + 1
     end
+    -- todo place modules if pumpjack.module_inventory_size and pumpjack.module_inventory_size > 0
+    -- local modules = {["speed-module-3"] = 1}
+    -- place_ghost(state, pumpjack.name, patch.position, defines.direction.north, modules)
     place_ghost(state, pumpjack.name, patch.position, patch.direction)
   end
-  if unconnected_pumps > 0 then
+  if #fluid_patches > 1 and unconnected_pumps > 0 then
     player.print({"well-planner.cant_connect", ""..unconnected_pumps, pumpjack.localised_name})
   end
 
+  log(profiler)
+  profile_checkpoint("route underground pipes")
+  profiler:reset()
 
-  -- convert to undergropund pipes
-  if global.config.well_planner_use_pipe_to_ground == true then
-    local pipe_to_ground = get_pipe_to_ground()
+  -- convert to underground pipes
+  if global.config.well_planner_use_pipe_to_ground == true and #pipes_to_place > 0 then
+    local pipe_to_ground = get_pipe_to_ground().place_result
     local fb = pipe_to_ground.fluidbox_prototypes[1]
     local mud = 10
     for k, v in pairs(fb.pipe_connections) do
@@ -876,30 +956,26 @@ local function on_selected_area(event, deconstruct_friendly)
     blockers_map[node.key] = true
   end
 
-  if global.config.well_planner_place_power_poles then
+  log(profiler)
+  profile_checkpoint("place elecctric poles")
+  profiler:reset()
+  state.profiler = profiler
+
+  if global.config.well_planner_place_electric_poles then
     -- log("place electric poles")
     local consumers = {}
     for i, p in ipairs(fluid_patches) do
       table.insert(consumers, {position = p.position, size = 1.5})
     end
-  
-    local stored_item_type = global.config.well_planner_power_pole_type
-    if stored_item_type == nil then
-      stored_item_type = "small-electric-pole"
-    end
-    local power_poles = game.get_filtered_entity_prototypes({{filter = "type", type = "electric-pole"}, {filter = "flag", flag = "player-creation", mode = "and"}})
-    local power_pole_proptotype = power_poles[stored_item_type]
-
-    if power_pole_proptotype == nil then
-      for k,v in pairs(power_poles) do
-        power_pole_proptotype = v
-        global.config.well_planner_power_pole_type = k
-        break
-      end
-    end
-
-    place_power_poles(blockers_map, consumers, power_pole_proptotype, work_zone, state)
+    local electric_pole_proptotype = get_electric_pole().place_result
+    place_electric_poles(blockers_map, consumers, electric_pole_proptotype, work_zone, state)
   end
+  log(profiler)
+  profile_checkpoint("done")
+  profiler = nil
+  log("total_time")
+  log(total_profiler)
+  total_profiler = nil
 end
 
 local function item_selector_flow_2(frame, config_name, prototypes, player)
@@ -915,35 +991,30 @@ local function item_selector_flow_2(frame, config_name, prototypes, player)
   local stored_item_type = global.config[config_name]
   
   local inv = player.get_main_inventory()
-  
-  for entity_id, ppp in pairs(prototypes) do
-    
-    if stored_item_type == nil then
-      stored_item_type = entity_id
-    end
-    
-    local button_name = config_name .. "_" .. entity_id
+
+  for item_name, item_prototype in pairs(prototypes) do
+    local button_name = config_name .. "_" .. item_name
     local style = "CGUI_logistic_slot_button"
-    if stored_item_type == entity_id then
+    if stored_item_type == item_name then
       style = "CGUI_yellow_logistic_slot_button"
     end
     flow.add (
       {
         name = button_name,
         type = "sprite-button",
-        sprite = "entity/" .. entity_id,
+        sprite = "entity/" .. item_name,
         style = style,
-        tooltip = ppp.localised_name,
-        number = inv.get_item_count(entity_id),
+        tooltip = item_prototype.localised_name,
+        number = inv.get_item_count(item_name),
       }
     )  
   end
-  
+    
   return flow
 end
 
 local function item_selector_flow(frame, config_name, type, player)
-  local prototypes = game.get_filtered_entity_prototypes({{filter = "type", type = type}, {filter = "flag", flag = "player-creation", mode = "and"}})
+  local prototypes = get_items_of_entity_type(type)
   return item_selector_flow_2(frame, config_name, prototypes, player)
 end
 
@@ -1001,16 +1072,14 @@ function gui_open_close_frame(player)
   frame.add(
     {
       type = "checkbox",
-      name = "well_planner_place_power_poles",
-      caption = {"well-planner.place_power_poles"},
-      state = global.config.well_planner_place_power_poles == true,
-      tooltip = {"well-planner.place_power_poles_tooltip"},
+      name = "well_planner_place_electric_poles",
+      caption = {"well-planner.place_electric_poles"},
+      state = global.config.well_planner_place_electric_poles == true,
+      tooltip = {"well-planner.place_electric_poles_tooltip"},
     }
   )
 
-
-  item_selector_flow(frame, "well_planner_power_pole_type", "electric-pole", player)
-
+  item_selector_flow(frame, "well_planner_electric_pole_type", "electric-pole", player)
 
   frame.add(
     {
