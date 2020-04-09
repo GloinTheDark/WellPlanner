@@ -533,6 +533,20 @@ local function place_electric_poles(blockers_map, consumers, pole_prototype, wor
   
 end
 
+-- returns a map of names of module ptorotypes
+local function get_module_prototypes()
+  out = {}
+  for name, item in pairs(game.item_prototypes) do
+    log(name)
+    log(item.type)
+    if item.type == "module" then
+      log("match")
+      out[name] = item
+    end
+  end
+  return out
+end
+
 -- returns a map of items that place entities of type
 local function get_items_of_entity_type(type)
   out = {}
@@ -608,17 +622,25 @@ local function get_electric_pole()
   return get_prototype_from_config(prototypes, config_name)
 end
 
+local function get_module()
+  local prototypes = get_module_prototypes()
+  local config_name = "well_planner_module_type"
+  return get_prototype_from_config(prototypes, config_name)
+end
+
 local function init()
   if not global.config then
     global.config = {
       well_planner_use_pipe_to_ground = true,
       well_planner_place_electric_poles = true,      
+      well_planner_use_modules = false,      
     }
   end
   get_pumpjack()
   get_pipe()
   get_pipe_to_ground()
   get_electric_pole()
+  get_module()
 end
 
 local function profile_checkpoint(tag)
@@ -825,10 +847,16 @@ local function on_selected_area(event, deconstruct_friendly)
     if not patch.direction then
       unconnected_pumps = unconnected_pumps + 1
     end
-    -- todo place modules if pumpjack.module_inventory_size and pumpjack.module_inventory_size > 0
-    -- local modules = {["speed-module-3"] = 1}
-    -- place_ghost(state, pumpjack.name, patch.position, defines.direction.north, modules)
-    place_ghost(state, pumpjack.name, patch.position, patch.direction)
+
+    -- place modules in pumpjack
+    local modules = {}
+    if global.config.well_planner_use_modules then
+      if pumpjack.module_inventory_size and pumpjack.module_inventory_size > 0 then
+        modules[get_module().name] = pumpjack.module_inventory_size
+      end
+    end
+    place_ghost(state, pumpjack.name, patch.position, patch.direction, modules)
+
   end
   if #fluid_patches > 1 and unconnected_pumps > 0 then
     player.print({"well-planner.cant_connect", ""..unconnected_pumps, pumpjack.localised_name})
@@ -1007,7 +1035,7 @@ local function item_selector_flow_2(frame, config_name, prototypes, player)
       {
         name = button_name,
         type = "sprite-button",
-        sprite = "entity/" .. item_name,
+        sprite = "item/" .. item_name,
         style = style,
         tooltip = item_prototype.localised_name,
         number = inv.get_item_count(item_name),
@@ -1030,7 +1058,7 @@ function gui_open_close_frame(player)
 
   local frame = flow.well_planner_config_frame
 
-  -- if the fram exists destropy it and return
+  -- if the frame exists destroy it and return
   if frame then
     frame.destroy()
     return
@@ -1043,26 +1071,72 @@ function gui_open_close_frame(player)
     caption = {"well-planner.config-frame-title"},
     direction = "vertical"
   }
+  
+  -- add a tabbed pane
+  local tabs = frame.add{
+    type = "tabbed-pane",
+    direction = "horizontal"
+  }
 
+  -- add tab1
+  tab1 = tabs.add {
+    type = "tab",
+    caption = {"well-planner.well_planner_tab1"},
+  }
 
-  frame.add(
+  local tab1contents = tabs.add{
+    type = "flow",
+    name = "tab1contents",
+    direction = "vertical",
+    enabled = true,
+  }
+
+  -- add tab2
+  local tab2 = tabs.add {
+    type = "tab",
+    caption = {"well-planner.well_planner_tab2"},
+  }
+
+  local tab2contents = tabs.add{
+    type = "flow",
+    name = "tab2contents",
+    direction = "vertical",
+    enabled = true,
+  }
+
+  tab2contents.add(
+    {
+      type = "checkbox",
+      name = "well_planner_use_modules",
+      caption = {"well-planner.use_modules"},
+      state = global.config.well_planner_use_modules == true,
+      tooltip = {"well-planner.use_modules_tooltip"},
+    }
+  )
+
+  item_selector_flow_2(tab2contents, "well_planner_module_type", get_module_prototypes(), player)
+
+  tabs.add_tab(tab1, tab1contents)
+  tabs.add_tab(tab2, tab2contents)
+
+  tab1contents.add(
     {
       type = "label",
       caption = {"well-planner.pumpjacks"},
     }
   )
 
-  item_selector_flow_2(frame, "well_planner_pumpjack_type", get_pumpjack_prototypes(), player)
+  item_selector_flow_2(tab1contents, "well_planner_pumpjack_type", get_pumpjack_prototypes(), player)
 
-  frame.add(
+  tab1contents.add(
     {
       type = "label",
       caption = {"well-planner.pipes"},
     }
   )
-  item_selector_flow(frame, "well_planner_pipe_type", "pipe", player)
+  item_selector_flow(tab1contents, "well_planner_pipe_type", "pipe", player)
 
-  frame.add(
+  tab1contents.add(
     {
       type = "checkbox",
       name = "well_planner_use_pipe_to_ground",
@@ -1072,9 +1146,9 @@ function gui_open_close_frame(player)
     }
   )
 
-  item_selector_flow(frame, "well_planner_pipe_to_ground_type", "pipe-to-ground", player)
+  item_selector_flow(tab1contents, "well_planner_pipe_to_ground_type", "pipe-to-ground", player)
 
-  frame.add(
+  tab1contents.add(
     {
       type = "checkbox",
       name = "well_planner_place_electric_poles",
@@ -1084,7 +1158,7 @@ function gui_open_close_frame(player)
     }
   )
 
-  item_selector_flow(frame, "well_planner_electric_pole_type", "electric-pole", player)
+  item_selector_flow(tab1contents, "well_planner_electric_pole_type", "electric-pole", player)
 
   frame.add(
     {
@@ -1110,12 +1184,14 @@ script.on_event(
       gui_open_close_frame(player)    
     elseif name:starts_with("well_planner_") and event.element.parent.type == "flow" then
       local config_key = event.element.parent.name
-      for _, sibling in pairs(event.element.parent.children) do
-        sibling.style = "CGUI_logistic_slot_button"
+      if config_key and config_key:starts_with("well_planner_") then
+        for _, sibling in pairs(event.element.parent.children) do
+          sibling.style = "CGUI_logistic_slot_button"
+        end
+        event.element.style = "CGUI_yellow_logistic_slot_button"
+        local stored_item_type = name:sub(string.len(config_key) + 2)
+        global.config[config_key] = stored_item_type
       end
-      event.element.style = "CGUI_yellow_logistic_slot_button"
-      local stored_item_type = name:sub(string.len(config_key) + 2)
-      global.config[config_key] = stored_item_type
     end
   end
 )
