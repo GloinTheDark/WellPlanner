@@ -1027,9 +1027,9 @@ local function item_selector_flow_2(frame, config_name, prototypes, player)
 
   for item_name, item_prototype in pairs(prototypes) do
     local button_name = config_name .. "_" .. item_name
-    local style = "CGUI_logistic_slot_button"
+    local style = "compact_slot"
     if stored_item_type == item_name then
-      style = "CGUI_yellow_logistic_slot_button"
+      style = "compact_slot_sized_button"
     end
     flow.add (
       {
@@ -1186,9 +1186,9 @@ script.on_event(
       local config_key = event.element.parent.name
       if config_key and config_key:starts_with("well_planner_") then
         for _, sibling in pairs(event.element.parent.children) do
-          sibling.style = "CGUI_logistic_slot_button"
+          sibling.style = "compact_slot"
         end
-        event.element.style = "CGUI_yellow_logistic_slot_button"
+        event.element.style = "compact_slot_sized_button"
         local stored_item_type = name:sub(string.len(config_key) + 2)
         global.config[config_key] = stored_item_type
       end
