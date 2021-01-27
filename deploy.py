@@ -3,6 +3,8 @@ import os
 import json
 import re
 
+version = "9.9.9"
+
 print('Scanning changelog.txt for version...')
 file1 = open('changelog.txt', 'r')
 Lines = file1.readlines() 
@@ -19,6 +21,7 @@ excludeFiles = [
     "deploy.py"
 ]
 
+
 myfiles = []
 for root, dirs, files in os.walk('.'):
     for d in dirs:
@@ -26,6 +29,8 @@ for root, dirs, files in os.walk('.'):
             dirs.remove(d)
     for name in files:
         myfiles.append(os.path.join(root, name))
+
+
 
 archiveName = f'WellPlanner_{version}'
 archiveFile = f'{archiveName}.zip'
@@ -50,6 +55,6 @@ try:
             print(f'Adding "{file}".')
             zf.write(file, f'{archiveName}/{file}')
 finally:
-    print('Closing.')
+    print(f'Closing {archiveName}.')
     zf.close()
 
