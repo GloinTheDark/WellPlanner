@@ -1,6 +1,11 @@
--- require("mod-gui")
+local mod_gui = require("mod-gui")
+
 local PriorityQueue = require("priority_queue")
 local pumpable_resource_categories = require("pumpable")
+
+
+local GUI_BUTTON = "wp_button"
+
 
 function string:starts_with(prefix)
   return string.find(self, prefix) == 1
@@ -657,6 +662,9 @@ local function on_selected_area(event, deconstruct_friendly)
   local pumpjack = get_pumpjack().place_result
 
   local player = game.players[event.player_index]
+
+  -- create_button(player)
+
   local surface = player.surface
   local force = player.force
 --	local conf = get_config(player)
@@ -1170,17 +1178,22 @@ function gui_open_close_frame(player)
 
 end
 
-local function on_mod_item_opened(event)
-  local player = game.players[event.player_index]
-  gui_open_close_frame(player)
-end
+-- local function on_mod_item_opened(event)
+--   local player = game.players[event.player_index]
+--   gui_open_close_frame(player)
+-- end
 
 script.on_event(
   defines.events.on_gui_click,
   function(event)
     local name = event.element.name
-    if name == "well_planner_close_button" then
-      local player = game.players[event.player_index]
+    game.print("Well Planner on_gui_click")
+    game.print(name)
+    local player = game.players[event.player_index]
+    
+    if event.element.name == GUI_BUTTON then
+      gui_open_close_frame(player)
+    elseif name == "well_planner_close_button" then
       gui_open_close_frame(player)    
     elseif name:starts_with("well_planner_") and event.element.parent.type == "flow" then
       local config_key = event.element.parent.name
@@ -1205,14 +1218,14 @@ script.on_event(
   end
 )
 
-script.on_event(
-  defines.events.on_mod_item_opened,
-  function(event)
-    if event.item.name == "well-planner" then
-      on_mod_item_opened(event)
-    end
-  end
-)
+-- script.on_event(
+--   defines.events.on_mod_item_opened,
+--   function(event)
+--     if event.item.name == "well-planner" then
+--       on_mod_item_opened(event)
+--     end
+--   end
+-- )
 
 script.on_event(
   defines.events.on_player_selected_area,
@@ -1232,3 +1245,62 @@ script.on_event(
   end
 )
 
+function get_wp_flow(player)
+  local button_flow = mod_gui.get_button_flow(player)
+  local flow = button_flow.wp_flow
+  if not flow then
+      flow = button_flow.add {
+          type = "flow",
+          name = "wp_flow",
+          direction = "horizontal"
+      }
+  end
+  return flow
+end
+
+function add_top_button(player)
+  game.print("Well Planner add_top_button")
+
+  if player.gui.top.wp_flow then player.gui.top.wp_flow.destroy() end -- remove the old flow
+
+  local flow = get_wp_flow(player)
+
+  if flow[GUI_BUTTON] then flow[GUI_BUTTON].destroy() end
+  flow.add {
+    -- type = "button",
+    name = GUI_BUTTON,
+    style = mod_gui.button_style,
+    tooltip = {"well-planner.config-frame-title"},
+    type = "sprite-button",
+    -- name = GUI_BUTTON,
+    sprite = "well-planner",
+    -- style = mod_gui.button_style,
+    -- tooltip = { "landfill_everythig_tooltip" }
+  }
+end
+
+script.on_init(
+  function()
+    game.print("Well Planner on_init")
+    for _, player in pairs(game.players) do
+        add_top_button(player)
+    end
+  end
+)
+
+script.on_event(defines.events.on_player_created, function(event)
+  game.print("Well Planner on_player_created")
+  local player = game.players[event.player_index]
+  add_top_button(player)
+end)
+
+
+script.on_configuration_changed(function(data)
+  game.print("Well Planner on_configuration_changed")
+  if not data or not data.mod_changes then
+      return
+  end
+  for _, player in pairs(game.players) do
+      add_top_button(player)
+  end
+end)
