@@ -24,11 +24,11 @@ excludeFiles = [
 
 myfiles = []
 for root, dirs, files in os.walk('.'):
-    for d in dirs:
-        if d.startswith('.'):
-            dirs.remove(d)
     for name in files:
-        myfiles.append(os.path.join(root, name))
+        path = os.path.join(root, name)
+        if not path.startswith('.\.'):
+            # print(path)
+            myfiles.append(path)
 
 
 
