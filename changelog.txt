@@ -1,5 +1,12 @@
 ---------------------------------------------------------------------------------------------------
-Version: 1.1.1
+Version: 1.1.2
+Date: 2022-11-4
+  Changes:
+    - Added Shortcut and Hotkey
+    - Improved graphics
+    - Fixed crash on startup
+---------------------------------------------------------------------------------------------------
+Version: 1.1.2
 Date: 2022-11-4
   Changes:
     - Added Shortcut and Hotkey

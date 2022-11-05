@@ -1187,8 +1187,8 @@ script.on_event(
   defines.events.on_gui_click,
   function(event)
     local name = event.element.name
-    game.print("Well Planner on_gui_click")
-    game.print(name)
+    -- game.print("Well Planner on_gui_click")
+    -- game.print(name)
     local player = game.players[event.player_index]
     
     if event.element.name == GUI_BUTTON then
@@ -1259,7 +1259,7 @@ function get_wp_flow(player)
 end
 
 function add_top_button(player)
-  game.print("Well Planner add_top_button")
+  -- game.print("Well Planner add_top_button")
 
   if player.gui.top.wp_flow then player.gui.top.wp_flow.destroy() end -- remove the old flow
 
@@ -1281,7 +1281,7 @@ end
 
 script.on_init(
   function()
-    game.print("Well Planner on_init")
+    -- game.print("Well Planner on_init")
     for _, player in pairs(game.players) do
         add_top_button(player)
     end
@@ -1289,14 +1289,14 @@ script.on_init(
 )
 
 script.on_event(defines.events.on_player_created, function(event)
-  game.print("Well Planner on_player_created")
+  -- game.print("Well Planner on_player_created")
   local player = game.players[event.player_index]
   add_top_button(player)
 end)
 
 
 script.on_configuration_changed(function(data)
-  game.print("Well Planner on_configuration_changed")
+  -- game.print("Well Planner on_configuration_changed")
   if not data or not data.mod_changes then
       return
   end

@@ -3,7 +3,7 @@ import os
 import json
 import re
 
-version = "9.9.9"
+version = "1.1.2"
 
 print('Scanning changelog.txt for version...')
 file1 = open('changelog.txt', 'r')
