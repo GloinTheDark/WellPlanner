@@ -633,7 +633,7 @@ local function get_module()
   return get_prototype_from_config(prototypes, config_name)
 end
 
-local function init()
+local function init_config()
   if not global.config then
     global.config = {
       well_planner_use_pipe_to_ground = true,
@@ -653,15 +653,24 @@ local function profile_checkpoint(tag)
 end  
 
 local function on_selected_area(event, deconstruct_friendly)
-  init()
+  -- game.print("on_selected_area")
+  init_config()
 
   local total_profiler = game.create_profiler()
   local profiler = game.create_profiler()
   profile_checkpoint("find patches")
 
-  local pumpjack = get_pumpjack().place_result
-
   local player = game.players[event.player_index]
+
+  local pumpjack_prototype = get_pumpjack();
+
+  if pumpjack_prototype == nil then
+    player.print({"well-planner.no_resoures"})
+    return
+  end
+  
+  local pumpjack = pumpjack_prototype.place_result
+
 
   -- create_button(player)
 
@@ -998,7 +1007,7 @@ local function on_selected_area(event, deconstruct_friendly)
   end
 
   log(profiler)
-  profile_checkpoint("place elecctric poles")
+  profile_checkpoint("place electric poles")
   profiler:reset()
   state.profiler = profiler
 
@@ -1060,7 +1069,7 @@ local function item_selector_flow(frame, config_name, type, player)
 end
 
 function gui_open_close_frame(player)
-  init()
+  init_config()
 
   local flow = player.gui.center
 
@@ -1267,15 +1276,11 @@ function add_top_button(player)
 
   if flow[GUI_BUTTON] then flow[GUI_BUTTON].destroy() end
   flow.add {
-    -- type = "button",
+    type = "sprite-button",
     name = GUI_BUTTON,
     style = mod_gui.button_style,
     tooltip = {"well-planner.config-frame-title"},
-    type = "sprite-button",
-    -- name = GUI_BUTTON,
     sprite = "well-planner",
-    -- style = mod_gui.button_style,
-    -- tooltip = { "landfill_everythig_tooltip" }
   }
 end
 

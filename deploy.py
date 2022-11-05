@@ -3,7 +3,7 @@ import os
 import json
 import re
 
-version = "1.1.2"
+version = "9.9.9"
 
 print('Scanning changelog.txt for version...')
 file1 = open('changelog.txt', 'r')
@@ -18,7 +18,8 @@ print(f'Version = "{version}"')
 excludeFiles = [
     "info.json", 
     ".gitattributes", 
-    "deploy.py"
+    "deploy.py",
+    "WellPlanner.code-workspace"
 ]
 
 
