@@ -66,7 +66,7 @@ data:extend(
             localised_name = {"item-name.well-planner"},
             action = "spawn-item",
             item_to_spawn = "well-planner",
-            key_sequence = "SHIFT + W",
+            key_sequence = "",
         },
         {
             type = "sprite",
