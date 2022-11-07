@@ -292,8 +292,6 @@ end
 local function connect_2_pole_groups(g1, g2, blockers_map, wire_range_squared, pole_width, pole_height)
   local p1, p2 = find_closest_poles(g1, g2)
 
-
-  -- log("connect_2_pole_groups 1")
   -- loop until we can merge the two groups or we fail to find a pole between them
   while true do
     local box = {}
@@ -542,10 +540,7 @@ end
 local function get_module_prototypes()
   out = {}
   for name, item in pairs(game.item_prototypes) do
-    log(name)
-    log(item.type)
     if item.type == "module" then
-      log("match")
       out[name] = item
     end
   end
@@ -573,8 +568,8 @@ local function get_pumpjack_prototypes()
   local out = {}
   for name, item in pairs(items) do
     local entity = item.place_result
-    for category in pairs(entity.resource_categories) do
-      if pumpable_resource_categories[category] then
+    for cat, _ in pairs(pumpable_resource_categories) do
+      if entity.resource_categories[cat] then
         out[name] = item
       end
     end
@@ -653,7 +648,7 @@ local function profile_checkpoint(tag)
 end  
 
 local function on_selected_area(event, deconstruct_friendly)
-  -- game.print("on_selected_area")
+  -- log("on_selected_area")
   init_config()
 
   local total_profiler = game.create_profiler()
@@ -670,7 +665,6 @@ local function on_selected_area(event, deconstruct_friendly)
   end
   
   local pumpjack = pumpjack_prototype.place_result
-
 
   -- create_button(player)
 
@@ -689,19 +683,19 @@ local function on_selected_area(event, deconstruct_friendly)
   local bad_resource_type
   for _, entity in pairs(event.entities) do
     -- ghost entities are not "valid"
-    if entity.valid then
-      p = entity.prototype
-      if pumpjack.resource_categories[p.resource_category] then
+    if entity.valid and pumpable_resource_categories[entity.name] then
+      patch_prototype = entity.prototype
 
-        local fluid_patches = patches_by_resource[p.name]
+      if pumpjack.resource_categories[patch_prototype.resource_category] then
+        local fluid_patches = patches_by_resource[patch_prototype.name]
         if not fluid_patches then
           fluid_patches = {}
-          patches_by_resource[p.name] = fluid_patches
+          patches_by_resource[patch_prototype.name] = fluid_patches
         end
         
         table.insert(fluid_patches, {position = entity.position})
       else
-        bad_resource_type = p.localised_name
+        bad_resource_type = patch_prototype.localised_name
       end	
     end	
   end
@@ -1196,8 +1190,8 @@ script.on_event(
   defines.events.on_gui_click,
   function(event)
     local name = event.element.name
-    -- game.print("Well Planner on_gui_click")
-    -- game.print(name)
+    -- log("Well Planner on_gui_click")
+    -- log(name)
     local player = game.players[event.player_index]
     
     if event.element.name == GUI_BUTTON then
@@ -1268,7 +1262,7 @@ function get_wp_flow(player)
 end
 
 function add_top_button(player)
-  -- game.print("Well Planner add_top_button")
+  -- log("Well Planner add_top_button")
 
   if player.gui.top.wp_flow then player.gui.top.wp_flow.destroy() end -- remove the old flow
 
@@ -1286,7 +1280,7 @@ end
 
 script.on_init(
   function()
-    -- game.print("Well Planner on_init")
+    -- log("Well Planner on_init")
     for _, player in pairs(game.players) do
         add_top_button(player)
     end
@@ -1294,14 +1288,14 @@ script.on_init(
 )
 
 script.on_event(defines.events.on_player_created, function(event)
-  -- game.print("Well Planner on_player_created")
+  -- log("Well Planner on_player_created")
   local player = game.players[event.player_index]
   add_top_button(player)
 end)
 
 
 script.on_configuration_changed(function(data)
-  -- game.print("Well Planner on_configuration_changed")
+  -- log("Well Planner on_configuration_changed")
   if not data or not data.mod_changes then
       return
   end
