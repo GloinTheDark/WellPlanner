@@ -184,6 +184,8 @@ local function place_ghost(state, prototype_name, position, direction, modules)
   args.force = state.force
   args.player = state.player
   local ghost = state.surface.create_entity(args)
+  script.raise_script_built({entity = ghost})
+
   if modules then
     ghost.item_requests = modules
   end
@@ -533,8 +535,9 @@ local function profile_checkpoint(tag)
   log(tag)
 end  
 
-function on_selected_area(event, deconstruct_friendly)
+function on_selected_area(event)
   -- log("on_selected_area")
+  -- log(script)
   init_config()
 
   local total_profiler = game.create_profiler()
@@ -561,7 +564,7 @@ function on_selected_area(event, deconstruct_friendly)
   local state = {
     player = player,
     force = force,
-    surface = surface,
+    surface = surface
   }
 
   -- find liquid resource patches...

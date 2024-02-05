@@ -6,6 +6,7 @@ local pumpable_resource_categories = {
     ["oil"] = true,
     ["crude-oil"] = true,
     ["mineral-water"] = true,
+    ["gas"] = true,
 }
 
 return pumpable_resource_categories

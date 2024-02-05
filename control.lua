@@ -219,22 +219,21 @@ script.on_event(
 --   end
 -- )
 
+local function local_on_selected_area(event)
+  if event.item == "well-planner" then
+    on_selected_area(event)
+  end
+end
+
+
 script.on_event(
   defines.events.on_player_selected_area,
-  function(event)
-    if event.item == "well-planner" then
-      on_selected_area(event)
-    end
-  end
+  local_on_selected_area
 )
 
 script.on_event(
   defines.events.on_player_alt_selected_area,
-  function(event)
-    if event.item == "well-planner" then
-      on_selected_area(event, true)
-    end
-  end
+  local_on_selected_area
 )
 
 function get_wp_flow(player)

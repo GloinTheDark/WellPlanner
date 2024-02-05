@@ -1,8 +1,11 @@
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.6
-Date: 2022-11-6
+Date: 2024-2-4
   Changes:
     - Cleaned up filtering and messages
+    - Added raise_script_built to support other mods
+    - Added support for gas wells ("Natural Gas" Mod)
+
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.5
 Date: 2022-11-6
